@@ -1,15 +1,16 @@
+import discord
 import os
 import random
 import asyncio
 import colorsys
-from datetime import datetime
-
-import discord
+from dotenv import load_dotenv
 from discord.ext import commands
 from discord.ui import View, Button
+from datetime import datetime
 
-# إعداد الثوابت
-TOKEN = "MTM2NDU0NDY3MjgyNzA1MjA0Mg.GWKJqr.MBfa_Gs54LgL0_1PvYGj5iJHeD-KQUfH23U88s"
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
+
 GUILD_ID = 1363957347298447360
 COLOR_ROLE_ID = 1364526866832162846
 ANNOUNCE_CH_ID = 1364541188644012033
@@ -18,12 +19,10 @@ COUNTDOWN_CH_ID = 1364747941532667987
 INTERVAL_SECONDS = 30
 MESSAGE_ID_FILE = "message_id.txt"
 
-# إعداد الـ Intents
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -51,6 +50,7 @@ def save_message_id(message_id):
 
 
 class ColorRoleButtons(View):
+
     def __init__(self, role_id):
         super().__init__(timeout=None)
         self.role_id = role_id
@@ -58,6 +58,9 @@ class ColorRoleButtons(View):
     @discord.ui.button(label="🎨 الحصول على الرتبة", style=discord.ButtonStyle.success, custom_id="get_rgb")
     async def get_rgb(self, interaction: discord.Interaction, button: Button):
         role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("❌ لم يتم العثور على الرتبة.", ephemeral=True)
+            return
         if role in interaction.user.roles:
             await interaction.response.send_message("🔔 لديك الرتبة بالفعل!", ephemeral=True)
         else:
@@ -67,6 +70,9 @@ class ColorRoleButtons(View):
     @discord.ui.button(label="❌ إزالة الرتبة", style=discord.ButtonStyle.danger, custom_id="remove_rgb")
     async def remove_rgb(self, interaction: discord.Interaction, button: Button):
         role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("❌ لم يتم العثور على الرتبة.", ephemeral=True)
+            return
         if role in interaction.user.roles:
             await interaction.user.remove_roles(role)
             await interaction.response.send_message("❎ تمت إزالة رتبة RGB.", ephemeral=True)
@@ -78,16 +84,20 @@ class ColorRoleButtons(View):
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     bot.loop.create_task(color_cycle())
-    info_channel = bot.get_channel(INFO_CHANNEL_ID)
-    if info_channel:
-        embed = discord.Embed(
-            title="INFO",
-            description="اكتب النص الذي تريده لتحويله إلى إيمبد، وسوف يظهر هنا.",
-            color=discord.Color.blue(),
-            timestamp=datetime.utcnow())
-        embed.set_footer(text=bot.guilds[0].name)
-        message = await info_channel.send(embed=embed)
-        await message.add_reaction("✍️")
+
+    channel = bot.get_channel(INFO_CHANNEL_ID)
+    if not channel:
+        print("❌ القناة غير موجودة.")
+        return
+
+    embed = discord.Embed(
+        title="INFO",
+        description="اكتب النص الذي تريده لتحويله إلى إيمبد، وسوف يظهر هنا.",
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow())
+    embed.set_footer(text=f"{bot.guilds[0].name}", icon_url=bot.guilds[0].icon.url if bot.guilds[0].icon else discord.Embed.Empty)
+    message = await channel.send(embed=embed)
+    await message.add_reaction("✍️")
 
     countdown_channel = bot.get_channel(COUNTDOWN_CH_ID)
     if countdown_channel:
@@ -98,46 +108,66 @@ async def on_ready():
 
 @bot.event
 async def on_reaction_add(reaction, user):
-    if user.bot:
+    if user == bot.user:
         return
 
     if reaction.emoji == "✍️":
-        await user.send("✏️ اكتب نص الإيمبد:")
+        await user.send("يرجى كتابة النص الذي تريد تحويله إلى إيمبد، ثم أرسله هنا.")
         try:
-            content = await bot.wait_for("message", timeout=60, check=lambda m: m.author == user)
-            await user.send("📌 أدخل عنوان الإيمبد:")
-            title = await bot.wait_for("message", timeout=60, check=lambda m: m.author == user)
-            await user.send("🎨 أدخل كود اللون (#FF5733):")
-            color_msg = await bot.wait_for("message", timeout=60, check=lambda m: m.author == user)
-            try:
-                color = discord.Color(int(color_msg.content.strip()[1:], 16))
-            except:
-                color = discord.Color.green()
+            msg = await bot.wait_for('message', timeout=60.0, check=lambda m: m.author == user)
+            await user.send("يرجى إدخال عنوان الإيمبد:")
+            title_msg = await bot.wait_for('message', timeout=60.0, check=lambda m: m.author == user)
+            await user.send("يرجى إدخال اللون (كود اللون الست عشري مثل #FF5733):")
+            color_msg = await bot.wait_for('message', timeout=60.0, check=lambda m: m.author == user)
 
-            await user.send("📢 أدخل ID الروم الذي تريد إرسال الإيمبد إليه:")
-            ch_id_msg = await bot.wait_for("message", timeout=60, check=lambda m: m.author == user)
-            channel = bot.get_channel(int(ch_id_msg.content))
-            if not channel:
-                await user.send("❌ القناة غير موجودة.")
+            try:
+                embed_color = discord.Color(int(color_msg.content.strip()[1:], 16))
+            except ValueError:
+                embed_color = discord.Color.green()
+
+            await user.send("يرجى إدخال ID الروم الذي تريد إرسال الإيمبد إليه:")
+            channel_id_msg = await bot.wait_for('message', timeout=60.0, check=lambda m: m.author == user)
+
+            try:
+                channel_id = int(channel_id_msg.content.strip())
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    await user.send("❌ القناة غير موجودة.")
+                    return
+            except ValueError:
+                await user.send("❌ ID القناة غير صحيح.")
                 return
 
-            embed = discord.Embed(title=title.content, description=content.content, color=color, timestamp=datetime.utcnow())
-            embed.set_footer(text=reaction.message.guild.name)
+            embed = discord.Embed(title=title_msg.content, description=msg.content, color=embed_color, timestamp=datetime.utcnow())
+            embed.set_footer(text=f"{reaction.message.guild.name}", icon_url=reaction.message.guild.icon.url if reaction.message.guild.icon else discord.Embed.Empty)
+
+            old_msg_id = 1364732432825454645
             try:
-                old_msg = await channel.fetch_message(read_message_id())
+                old_msg = await channel.fetch_message(old_msg_id)
                 await old_msg.delete()
-            except:
-                pass
-            sent = await channel.send(embed=embed)
-            save_message_id(sent.id)
-            await user.send("✅ تم إرسال الإيمبد!")
+            except Exception as e:
+                print(f"❌ Error deleting old message: {e}")
+
+            new_message = await channel.send(embed=embed)
+            save_message_id(new_message.id)
+            await user.send("✅ تم إرسال الإيمبد بنجاح!")
+
         except asyncio.TimeoutError:
-            await user.send("❌ لم يتم الرد في الوقت المحدد.")
-    
+            await user.send("❌ لم تكتب النص أو العنوان في الوقت المحدد.")
+
     elif str(reaction.emoji) == "✅" and reaction.message.channel.id == COUNTDOWN_CH_ID:
-        await reaction.message.channel.send("✅ تم بدء العد من 1 إلى مليون! 🔢")
+        countdown_channel = reaction.message.channel
+        await countdown_channel.send("✅ تم بدء العد من 1 إلى مليون! 🔢")
         for i in range(1, 1000001):
-            await reaction.message.channel.send(str(i))
+            await countdown_channel.send(f"{i}")
+            await asyncio.sleep(2)
+        await countdown_channel.send("🚀 تم الانتهاء من العد إلى مليون.")
+        await asyncio.sleep(2)
+        await countdown_channel.send("🔄 بدأ العد من 0 الآن!")
+        count = 0
+        while True:
+            await countdown_channel.send(f"{count}")
+            count += 1
             await asyncio.sleep(2)
 
 
@@ -146,37 +176,56 @@ async def color_cycle():
     guild = bot.get_guild(GUILD_ID)
     role = guild.get_role(COLOR_ROLE_ID)
     channel = bot.get_channel(ANNOUNCE_CH_ID)
+
+    if not role:
+        print(f"❌ لم يتم العثور على الدور ID: {COLOR_ROLE_ID}")
+        return
+
+    next_color = generate_random_color()
     view = ColorRoleButtons(COLOR_ROLE_ID)
 
-    while True:
-        new_color = generate_random_color()
+    old_msg_id = read_message_id()
+    if old_msg_id:
         try:
-            await role.edit(color=new_color)
-            embed = discord.Embed(
-                description=f"⏰ سيتم تغيير لون الرتبة خلال `{INTERVAL_SECONDS}` ثانية\n\nاستخدم الأزرار للحصول أو إزالة الرتبة.",
-                color=new_color)
-            embed.set_footer(text=f"{guild.name} • {datetime.now().strftime('%I:%M:%S %p')}")
-            embed.set_image(url=f"https://singlecolorimage.com/get/{new_color.value:06x}/50x50")
+            old_msg = await channel.fetch_message(old_msg_id)
+            await old_msg.delete()
+        except:
+            pass
 
-            old_msg_id = read_message_id()
-            if old_msg_id:
-                try:
-                    old_msg = await channel.fetch_message(old_msg_id)
-                    await old_msg.delete()
-                except:
-                    pass
+    embed = discord.Embed(
+        description=f"⏰ سيتم تغيير لون الرتبة خلال `{INTERVAL_SECONDS}` ثانية\n\nيمكنك استخدام الأزرار أدناه للحصول أو إزالة الرتبة.",
+        color=next_color)
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    embed.set_footer(text=f"{guild.name} • {datetime.now().strftime('%I:%M:%S %p')}", icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+    embed.add_field(name="🌈 اللون التالي", value=f"\u200b", inline=False)
+    embed.set_image(url=f"https://singlecolorimage.com/get/{next_color.value:06x}/50x50")
 
-            msg = await channel.send(embed=embed, view=view)
-            save_message_id(msg.id)
+    message = await channel.send(embed=embed, view=view)
+    save_message_id(message.id)
 
-            for i in range(INTERVAL_SECONDS, 0, -1):
-                embed.description = f"⏰ سيتم تغيير لون الرتبة خلال `{i}` ثانية\n\nاستخدم الأزرار للحصول أو إزالة الرتبة."
-                await msg.edit(embed=embed, view=view)
-                await asyncio.sleep(1)
+    while True:
+        for remaining in range(INTERVAL_SECONDS, 0, -1):
+            try:
+                embed.description = f"⏰ سيتم تغيير لون الرتبة خلال `{remaining}` ثانية\n\nيمكنك استخدام الأزرار أدناه للحصول أو إزالة الرتبة."
+                embed.set_footer(text=f"{guild.name} • {datetime.now().strftime('%I:%M:%S %p')}", icon_url=guild.icon.url if guild.icon else discord.Embed.Empty)
+                await message.edit(embed=embed, view=view)
+            except Exception as e:
+                print(f"❌ Error updating message: {e}")
+            await asyncio.sleep(1)
 
+        try:
+            if not guild.me.guild_permissions.manage_roles:
+                print("❌ البوت ليس لديه صلاحية إدارة الأدوار.")
+                return
+
+            await role.edit(color=next_color)
+            print(f"✅ Changed '{role.name}' color to {next_color}")
         except Exception as e:
-            print(f"❌ خطأ أثناء تحديث اللون أو الرسالة: {e}")
-            await asyncio.sleep(5)
+            print(f"❌ Error changing role color: {e}")
+
+        next_color = generate_random_color()
+        embed.color = next_color
+        embed.set_image(url=f"https://singlecolorimage.com/get/{next_color.value:06x}/50x50")
 
 
 bot.run(TOKEN)
