@@ -9,7 +9,8 @@ from discord.ui import View, Button
 from datetime import datetime
 
 load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
+
+TOKEN = os.getenv("MTM2NDU0NDY3MjgyNzA1MjA0Mg.GWKJqr.MBfa_Gs54LgL0_1PvYGj5iJHeD-KQUfH23U88s")
 GUILD_ID = 1363957347298447360
 COLOR_ROLE_ID = 1364526866832162846
 ANNOUNCE_CH_ID = 1364541188644012033
